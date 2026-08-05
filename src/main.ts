@@ -6,6 +6,7 @@
  * recordings stay frame-exact on a machine that cannot hold 60 FPS.
  */
 import { MAX_TICKS_PER_FRAME, TICK_DT } from "./core/constants";
+import { EYE_STATES } from "./render/mimic-eye";
 import { ENDING_SECONDS } from "./story/content";
 import { Input } from "./core/input";
 import { Game } from "./game/game";
@@ -103,6 +104,23 @@ function handleMetaKeys(): void {
     if (input.consumePress("Digit3")) {
       game.pushLog(`FLASHING // ${game.settings.cycle("flashing").toUpperCase()}`, "info");
     }
+  }
+  // Eye tuning. Only while diagnostics are up, so it can never fire in play.
+  //
+  // Cycling the eye through its states by hand is the only practical way to
+  // tune them: several are moments rather than modes — the lock flash, the
+  // prediction sweep, the failure flicker — and waiting for MIMIC to produce
+  // one naturally can take an entire run.
+  if (game.debug && input.consumePress("BracketRight")) {
+    const list = EYE_STATES;
+    const at = game.eye.forcedState ? list.indexOf(game.eye.forcedState) : -1;
+    const next = at + 1 >= list.length ? null : list[at + 1];
+    game.eye.force(next);
+    game.pushLog(`EYE // ${next ? next.toUpperCase() : "LIVE"}`, "info");
+  }
+  if (game.debug && input.consumePress("BracketLeft")) {
+    game.eye.force(null);
+    game.pushLog("EYE // LIVE", "info");
   }
   if (input.consumePress("KeyM")) {
     game.sfx.muted = !game.sfx.muted;

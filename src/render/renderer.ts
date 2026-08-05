@@ -19,7 +19,7 @@ import {
   VIEW_W,
 } from "../core/constants";
 import { POWER } from "../ai/abilities";
-import { type Dir, clamp, dirFromVector, dirVector } from "../core/math";
+import { clamp, dirVector } from "../core/math";
 import type { Game } from "../game/game";
 import { rayDistance } from "../systems/los";
 import { isOldEcho } from "../story/old-echo";
@@ -727,9 +727,6 @@ export class Renderer {
 
   /* --------------------------------------------------------------- agents */
 
-  private dirOf(angle: number): Dir {
-    return dirFromVector(Math.cos(angle), Math.sin(angle), 0);
-  }
 
   private drawEchoes(game: Game): void {
     const g = this.bctx;
@@ -861,16 +858,19 @@ export class Renderer {
     const m = game.mimic;
     const b = this.brightness(game, Math.floor(m.x / TILE), Math.floor(m.y / TILE));
     if (b < ENTITY_VISIBLE) return;
-    const set = m.alerted ? this.art.mimic.alert : this.art.mimic.idle;
-    // Drawn by gaze, not by facing. The shell is a symmetrical disc, so the only
-    // thing that visibly changes is where the eye sits — which is exactly the
-    // effect: the eye snaps to a noise, and the body swings round after it.
-    // The vision cone stays on `facing`, so this can never imply MIMIC sees
-    // somewhere it does not.
-    const frame = frameAt(set[this.dirOf(m.gaze)], game.elapsed);
+    const set = m.alerted ? this.art.mimicShell.alert : this.art.mimicShell.idle;
+    const frame = frameAt(set[0], game.elapsed);
     this.bctx.globalAlpha = clamp(b + 0.35, 0, 1);
     this.bctx.drawImage(frame, this.sx(m.x - TILE / 2), this.sy(m.y - TILE / 2));
     this.bctx.globalAlpha = 1;
+
+    // The eye goes on last, live.
+    //
+    // Drawn along the gaze, not the facing: the eye snaps to a noise and the
+    // body swings round after it. The vision cone stays on `facing`, so however
+    // far the eye has turned it can never imply MIMIC sees somewhere it does
+    // not — the gaze is a tell about intent, the cone is the truth.
+    this.drawMimicEye(game, m.x, m.y, m.gaze, clamp(b + 0.35, 0, 1));
 
     // Hesitation: a faint ring that tightens as it makes up its mind. Small and
     // brief, but it is the only feedback the player gets that a decoy worked.
@@ -886,6 +886,83 @@ export class Renderer {
       g.stroke();
       g.restore();
     }
+  }
+
+  /**
+   * MIMIC's eye, drawn from the controller's numbers.
+   *
+   * Four concentric parts — socket, iris, pupil, core — so the two things the
+   * player has to be able to read at a glance, aperture and pupil size, are
+   * carried by shape rather than by colour alone. That matters: a red eye
+   * getting redder is not information anyone can act on, but an iris closing to
+   * a pinpoint is.
+   */
+  private drawMimicEye(
+    game: Game,
+    x: number,
+    y: number,
+    gaze: number,
+    a: number,
+  ): void {
+    const v = game.eye.view;
+    const g = this.bctx;
+    // Flashing is an accessibility dial; when it is turned down the eye stops
+    // strobing but keeps every shape change, so nothing becomes unreadable.
+    const flash = game.settings.scale("flashing");
+    const flicker = 1 - (1 - v.flicker) * flash;
+    const glow = clamp(v.glow * flicker, 0, 1);
+
+    // Where the eye sits on the shell, and a small live wander on top.
+    const ang = gaze + v.drift;
+    const ex = this.sx(x + Math.cos(ang) * 1.9);
+    const ey = this.sy(y - 0.5 + Math.sin(ang) * 1.9);
+
+    const base = v.tint === "cyan" ? PAL.cyan : PAL.red;
+    const core = v.tint === "cyan" ? PAL.cyanBright : PAL.redBright;
+
+    g.save();
+    g.globalAlpha = a;
+
+    // Socket. Its height is the aperture, so a focused eye is a narrow slit and
+    // a startled one is round — legible with colour removed entirely.
+    const rx = 3.1;
+    const ry = 3.1 * (0.35 + 0.65 * v.aperture);
+    g.fillStyle = alpha(PAL.redDeep, 0.75);
+    g.beginPath();
+    g.ellipse(ex, ey, rx + 1, ry + 1, 0, 0, Math.PI * 2);
+    g.fill();
+
+    g.fillStyle = alpha(base, 0.6 + 0.4 * glow);
+    g.beginPath();
+    g.ellipse(ex, ey, rx, ry, 0, 0, Math.PI * 2);
+    g.fill();
+
+    // Pupil.
+    const pr = Math.max(0.45, rx * 0.52 * v.pupil);
+    g.fillStyle = alpha(core, 0.55 + 0.45 * glow);
+    g.beginPath();
+    g.ellipse(ex, ey, pr, Math.min(pr, ry * 0.9), 0, 0, Math.PI * 2);
+    g.fill();
+
+    // Confirmed target gets a hard white core — the single frame that says
+    // "it has decided it is you".
+    if (v.state === "locked" && glow > 0.6) {
+      g.fillStyle = alpha(PAL.white, (glow - 0.6) * 2.2);
+      g.fillRect(Math.round(ex) - 0.5, Math.round(ey) - 0.5, 1, 1);
+    }
+
+    // Scan ring: abilities and the moment of confirmation.
+    if (v.ring !== null) {
+      const k = v.ring;
+      g.globalCompositeOperation = "lighter";
+      g.strokeStyle = alpha(base, 0.35 * (1 - k) * flash + 0.1 * (1 - k));
+      g.lineWidth = 1;
+      g.beginPath();
+      g.arc(this.sx(x), this.sy(y), 6 + k * 16, 0, Math.PI * 2);
+      g.stroke();
+    }
+
+    g.restore();
   }
 
   /* ---------------------------------------------------------------- glows */

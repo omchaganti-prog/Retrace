@@ -51,7 +51,17 @@ export type SoundKind =
   /** Rising wind-up while a dash charges. UI-only. */
   | "charge"
   /** Refused dash — not enough stamina. UI-only. */
-  | "drained";
+  | "drained"
+  /* MIMIC's eye. UI-only: these are the eye reporting its own state to the
+   * player, not noises MIMIC makes in the world, so they never reach the bus. */
+  /** The eye snapping to a stimulus. */
+  | "eyeSnap"
+  /** Target confirmed. */
+  | "eyeLock"
+  /** Working out where you are going. */
+  | "eyePredict"
+  /** The prediction came to nothing. */
+  | "eyeFail";
 
 /**
  * Who made a noise.

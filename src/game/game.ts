@@ -40,6 +40,7 @@ import {
 } from "../ai/abilities";
 import { ADAPTATION_LABEL, Adaptation } from "../ai/adaptation";
 import { AnalysisBook } from "../ai/analysis";
+import { MimicEyeController } from "../render/mimic-eye";
 import { Mimic } from "../entities/mimic";
 import { Player } from "../entities/player";
 import { Sfx } from "../systems/audio";
@@ -201,6 +202,14 @@ export class Game {
   readonly abilities: AbilityManager;
   /** Transient ability visuals for the renderer. */
   readonly mimicFx: MimicFx[] = [];
+  /**
+   * MIMIC's eye. Presentation only — it reads the simulation and never writes
+   * to it, apart from `reactionHold`, which is the deliberate beat between the
+   * eye noticing something and the body being allowed to act on it.
+   */
+  readonly eye = new MimicEyeController();
+  /** Ability that fired this tick, handed to the eye then cleared. */
+  private eyeAbility: MimicFx["kind"] | null = null;
   /** Toggled with F1; gates the developer overlay. */
   debug = false;
 
@@ -456,6 +465,9 @@ export class Game {
       emitFx: (fx) => {
         this.mimicFx.push({ ...fx, age: 0 });
         if (this.mimicFx.length > 12) this.mimicFx.shift();
+        // The eye gives every ability its own tell, so it needs to know which
+        // one fired rather than just that something did.
+        this.eyeAbility = fx.kind;
       },
     };
   }
@@ -955,6 +967,7 @@ export class Game {
     this.detectTactics(dt, onShadow, outcome.divertedByEcho, ptx, pty);
 
     this.emitMimicFootsteps(dt);
+    this.updateEye(dt);
 
     if (outcome.caughtPlayer) this.onCaught();
 
@@ -963,6 +976,54 @@ export class Game {
 
     this.sounds.endTick(dt);
     this.echoes.endTick();
+  }
+
+  /**
+   * Feeds MIMIC's eye and plays whatever it asks for.
+   *
+   * Everything here is read from the simulation that has already run this tick,
+   * so the eye can only ever reflect a decision MIMIC actually made. The one
+   * exception is `reactionHold`, which the Mimic reads back: that is the beat
+   * between the eye noticing something and the body being allowed to turn.
+   */
+  private updateEye(dt: number): void {
+    const m = this.mimic;
+    // What it is currently interested in. An ECHO it has not seen through is
+    // the interesting case, because that is when the eye should look unsure.
+    const target =
+      m.playerDetected
+        ? "player"
+        : m.lastHeardSource === "echo"
+          ? "echo"
+          : m.lastHeardSource
+            ? "sound"
+            : "none";
+
+    this.eye.update(dt, {
+      state: m.state,
+      detection: m.detection,
+      playerDetected: m.playerDetected,
+      confusionT: m.confusionT,
+      focusPulse: m.focusPulse,
+      hunt: this.hunt.active,
+      power: this.abilities.powerFraction,
+      drain: this.abilities.drain,
+      target,
+      // What MIMIC actually believes about you, not a number invented for the
+      // animation — the same figure the facility's own dossier prints.
+      predictionConfidence: this.memory.knowledge() / 100,
+      jamming: this.jamBuzz > 0.01,
+      ability: this.eyeAbility,
+    });
+    this.eyeAbility = null;
+
+    // Eye sounds are deliberately tiny. MIMIC is frightening because it is
+    // quiet, and a machine that chirps constantly is not.
+    const cue = this.eye.consumeCue();
+    if (cue === "snap") this.sfx.play("eyeSnap", 0.5);
+    else if (cue === "lock") this.sfx.play("eyeLock", 0.7);
+    else if (cue === "predict") this.sfx.play("eyePredict", 0.45);
+    else if (cue === "fail") this.sfx.play("eyeFail", 0.5);
   }
 
   /* --------------------------------------------------------------- puzzles */

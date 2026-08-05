@@ -145,4 +145,7 @@ const GAME_KEYS = new Set([
   "Space",
   "Enter",
   "Tab",
+  // Eye-state stepping, diagnostics only.
+  "BracketLeft",
+  "BracketRight",
 ]);

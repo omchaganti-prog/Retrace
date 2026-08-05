@@ -598,7 +598,7 @@ function drawDebug(ctx: Ctx, game: Game): void {
   ctx.save();
   ctx.globalAlpha = 0.55;
   ctx.fillStyle = PAL.void;
-  ctx.fillRect(x - 10, y - 26, 212, 300);
+  ctx.fillRect(x - 10, y - 26, 212, 372);
   ctx.globalAlpha = 1;
   ctx.restore();
 
@@ -612,6 +612,20 @@ function drawDebug(ctx: Ctx, game: Game): void {
   row("LAST ABILITY", a.lastUsed ?? "-", PAL.cyan);
   row("ACTIVE", a.active ? `${a.active.id} ${a.active.t.toFixed(1)}s` : "-", PAL.cyan);
   row("PATTERN WEAR", game.analysis.familiarity().toFixed(2), PAL.white);
+
+  // The eye. Tuning it needs the numbers behind it visible side by side with
+  // the animation, or there is no way to tell a wrong value from a wrong curve.
+  const eye = game.eye;
+  const v = eye.view;
+  row(
+    "EYE",
+    eye.forcedState ? `${v.state.toUpperCase()} (FORCED)` : v.state.toUpperCase(),
+    eye.forcedState ? PAL.amber : PAL.white,
+  );
+  row("  PUPIL / APERTURE", `${v.pupil.toFixed(2)} / ${v.aperture.toFixed(2)}`, PAL.white);
+  row("  GLOW / FLICKER", `${v.glow.toFixed(2)} / ${v.flicker.toFixed(2)}`, PAL.white);
+  row("  PREDICTION", `${game.memory.knowledge()}%`, PAL.cyan);
+  row("  REACTION HOLD", `${game.mimic.reactT.toFixed(2)}s`, PAL.cyan);
 
   const pl = game.player;
   row(

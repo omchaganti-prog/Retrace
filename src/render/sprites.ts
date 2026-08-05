@@ -152,6 +152,42 @@ function agentAnims(c: SuitColors): { idle: Anim[]; walk: Anim[] } {
   return { idle, walk };
 }
 
+/**
+ * MIMIC's shell, with no eye on it.
+ *
+ * The eye used to be baked into these frames, one per facing direction, which
+ * meant it could only ever do the eight things the spritesheet knew about. It
+ * is now drawn live over this shell so it can contract, widen, flicker and
+ * track independently of the body — see `mimic-eye.ts`.
+ */
+function drawMimicShell(p: Painter, pulse: number, alert: boolean): void {
+  const cx = 8;
+  const cy = 7.5 - pulse * 0.5;
+
+  p.disc(8, 14, 3.4, PAL.black, 0.4);
+  p.rect(6, 15, 4, 1, PAL.black, 0.25);
+
+  const haloA = alert ? 0.3 : 0.14;
+  p.ring(cx, cy, 7.2, alert ? PAL.red : PAL.redDeep, haloA);
+
+  p.disc(cx, cy, 6, PAL.mimicRim);
+  p.disc(cx, cy, 5.3, PAL.mimicBody);
+  p.ring(cx, cy, 6, PAL.redDeep, 0.55);
+  // Specular arc across the top-left of the shell.
+  p.px(cx - 3, cy - 4, PAL.grey, 0.35);
+  p.px(cx - 2, cy - 5, PAL.grey, 0.28);
+}
+
+function mimicShellAnims(): { idle: Anim[]; alert: Anim[] } {
+  // Direction-independent: the shell is a symmetrical disc, so one animation
+  // serves every facing and the spritesheet shrinks by a factor of eight.
+  const pulses = [0, 0.5, 1, 0.5];
+  return {
+    idle: [anim(pulses.map((v) => paint(TILE, TILE, (p) => drawMimicShell(p, v, false))), 0.18)],
+    alert: [anim([0, 1].map((v) => paint(TILE, TILE, (p) => drawMimicShell(p, v, true))), 0.1)],
+  };
+}
+
 /** MIMIC: a floating dark orb with one large red eye. */
 function drawMimic(p: Painter, dir: number, pulse: number, alert: boolean): void {
   const { fx: dx, fy: dy } = facing(dir);
@@ -400,6 +436,8 @@ export interface Art {
   player: { idle: Anim[]; walk: Anim[] };
   echo: { idle: Anim[]; walk: Anim[] };
   mimic: { idle: Anim[]; alert: Anim[] };
+  /** Shell only; the eye is drawn live on top. */
+  mimicShell: { idle: Anim[]; alert: Anim[] };
   floors: Canvas[];
   walls: Canvas[];
   grate: Canvas;
@@ -449,6 +487,7 @@ export function buildArt(): Art {
       walk: player.walk.map(ghost),
     },
     mimic: mimicAnims(),
+    mimicShell: mimicShellAnims(),
     floors: [0, 1, 2, 3, 0, 2].map((v) => paint(TILE, TILE, (p) => drawFloor(p, v))),
     walls: [0, 1, 2, 3].map((v) => paint(TILE, TILE, (p) => drawWall(p, v))),
     grate: paint(TILE, TILE, drawGrate),

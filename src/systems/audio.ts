@@ -173,6 +173,34 @@ const VOICES: Record<SoundKind, Voice> = {
       { wave: "noise", freq: 2400, endFreq: 300, duration: 0.3, gain: 0.08, q: 0.9 },
     ],
   },
+  // The eye. Four cues, all tiny on purpose: MIMIC is frightening because it is
+  // quiet, so these have to sit under the room rather than announce themselves.
+  /** Mechanical click as the eye snaps to a noise. */
+  eyeSnap: one({ wave: "square", freq: 1500, endFreq: 900, duration: 0.03, gain: 0.05 }, 0.04),
+  /** Target confirmed. The one eye sound the player should learn to dread. */
+  eyeLock: {
+    jitter: 0.01,
+    layers: [
+      { wave: "square", freq: 260, endFreq: 720, duration: 0.1, gain: 0.11 },
+      { wave: "sine", freq: 1250, endFreq: 1700, duration: 0.07, gain: 0.05 },
+    ],
+  },
+  /** Digital processing chatter while it works out where you are going. */
+  eyePredict: {
+    jitter: 0.02,
+    layers: [
+      { wave: "square", freq: 1750, endFreq: 2150, duration: 0.05, gain: 0.035 },
+      { wave: "triangle", freq: 620, endFreq: 880, duration: 0.13, gain: 0.045 },
+    ],
+  },
+  /** Prediction came to nothing. Deliberately a little broken-sounding. */
+  eyeFail: {
+    jitter: 0.05,
+    layers: [
+      { wave: "square", freq: 700, endFreq: 190, duration: 0.16, gain: 0.07 },
+      { wave: "noise", freq: 900, endFreq: 260, duration: 0.11, gain: 0.045, q: 1.1 },
+    ],
+  },
   /** Low system-activation tone. */
   override: {
     jitter: 0.01,

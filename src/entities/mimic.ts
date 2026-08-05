@@ -82,6 +82,8 @@ const HEAR_THRESHOLD = 1.1;
 const WAYPOINT_EPS = 5;
 /** How close a patrol/search goal counts as reached, in pixels. */
 const GOAL_EPS = 12;
+/** Seconds the body waits after the eye has snapped to something. */
+const REACTION_HOLD = 0.18;
 /**
  * Patrol-seconds spent walking to one stop before MIMIC gives up on it and moves
  * to the next.
@@ -142,6 +144,18 @@ export class Mimic {
 
   /** Seconds it will stand still to scan. Perception continues; movement stops. */
   holdT = 0;
+  /**
+   * The beat between noticing something and acting on it.
+   *
+   * The eye snaps to a noise on the frame it happens; the body is held here for
+   * a fraction of a second before it is allowed to turn and go. That pause is
+   * the whole difference between a machine executing a state transition and one
+   * that appears to be deciding — without it, MIMIC spinning instantly toward a
+   * sound behind it reads as a script rather than as attention.
+   *
+   * Perception keeps running throughout: this stops the body, never the senses.
+   */
+  reactT = 0;
   /** 0..1 reduced awareness while bound to a facility subsystem. */
   distracted = 0;
   /** Seconds left committed to an intercept point. */
@@ -245,6 +259,7 @@ export class Mimic {
     this.unseenT = Number.POSITIVE_INFINITY;
     this.focusPulse = 0;
     this.holdT = 0;
+    this.reactT = 0;
     this.distracted = 0;
     this.interceptT = 0;
     this.graceT = 0;
@@ -397,6 +412,7 @@ export class Mimic {
         this.lookAt(ev.x, ev.y);
         this.lastKnown = { x: ev.x, y: ev.y };
         this.lastHeardSource = ev.source;
+        if (this.state !== "alert") this.reactT = REACTION_HOLD;
         this.setState("alert");
         this.setGoal(ev.x, ev.y);
         if (ev.source === "echo") {
@@ -464,7 +480,8 @@ export class Mimic {
 
     // Scanning abilities root it in place; a subsystem link drags on it.
     this.holdT = Math.max(0, this.holdT - dt);
-    if (this.holdT <= 0) {
+    this.reactT = Math.max(0, this.reactT - dt);
+    if (this.holdT <= 0 && this.reactT <= 0) {
       const base =
         this.state === "chase"
           ? MIMIC.chaseSpeed
