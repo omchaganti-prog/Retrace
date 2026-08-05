@@ -57,6 +57,20 @@ describe("the eye reflects the simulation", () => {
     expect(late).toBeLessThan(early);
   });
 
+  it("shows being seen even while MIMIC is nominally searching", () => {
+    // Regression. Detection used to be classified *below* the ambient AI
+    // states, so while MIMIC was investigating or alert — which is most of the
+    // time it can see anything at all — a climbing detection was masked. At
+    // 0.98, one frame from capture, the eye still read as a relaxed search.
+    // Being seen has to outrank whatever MIMIC is doing while it sees you.
+    for (const state of ["investigate", "alert", "intercept"] as const) {
+      const eye = new MimicEyeController();
+      settle(eye, { state, detection: 0.9 }, 0.6);
+      expect(eye.view.state, `${state} must not mask detection`).toBe("focusing");
+      expect(eye.view.pupil).toBeLessThan(0.5);
+    }
+  });
+
   it("brightens as detection climbs", () => {
     const eye = new MimicEyeController();
     settle(eye, { detection: 0.15 }, 0.5);

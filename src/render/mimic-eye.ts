@@ -390,6 +390,17 @@ export class MimicEyeController {
     if (s.ability && this.ringT > 0) return "ability";
     if (s.playerDetected) return "locked";
 
+    // Detection outranks every ambient state, and this ordering is load-bearing.
+    //
+    // It used to sit below them, which meant that while MIMIC was nominally
+    // searching or alert — which is most of the time it can see anything at all
+    // — a climbing detection was masked completely. Measured in play: at 0.98,
+    // one frame from being caught, the eye was still showing a wide, relaxed
+    // searching pupil, and the player's only warning was the lock itself. The
+    // one thing this eye exists to say is "I am seeing you, now"; it cannot be
+    // outvoted by what MIMIC happens to be doing while it does it.
+    if (s.detection > 0.05) return "focusing";
+
     if (s.state === "chase") {
       // Chasing with no confirmation left is the moment it lost you, and it
       // must not look the same as chasing with you in view.
@@ -399,7 +410,6 @@ export class MimicEyeController {
     if (s.state === "alert" || s.state === "intercept") {
       return s.target === "echo" ? "uncertain" : "heard";
     }
-    if (s.detection > 0.05) return "focusing";
     return "idle";
   }
 }
