@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>RETRACE</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #04070c;
+        overflow: hidden;
+        font-family: "Consolas", "DejaVu Sans Mono", monospace;
+        color: #9fd8e8;
+      }
+      #stage {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+      }
+      canvas {
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        display: block;
+        box-shadow: 0 0 60px rgba(0, 0, 0, 0.9);
+      }
+      #boot {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        place-items: center;
+        background: #04070c;
+        z-index: 10;
+        letter-spacing: 0.25em;
+        font-size: 14px;
+        text-align: center;
+        cursor: pointer;
+      }
+      #boot.hidden {
+        display: none;
+      }
+      #boot b {
+        display: block;
+        font-size: 42px;
+        letter-spacing: 0.5em;
+        color: #55e2ff;
+        margin-bottom: 18px;
+      }
+      #boot small {
+        display: block;
+        margin-top: 26px;
+        color: #4a6a7a;
+        letter-spacing: 0.2em;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"><canvas id="game"></canvas></div>
+    <div id="boot">
+      <div>
+        <b>RETRACE</b>
+        IT REMEMBERS EVERY MISTAKE
+        <small>[ CLICK OR PRESS ANY KEY TO INITIALIZE ]</small>
+      </div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
