@@ -79,15 +79,40 @@ describe("the eye leads the body", () => {
     const m = make(7, 3);
     const s = senses();
     const target = tileCenter(1, 3);
-    m.alertTo(target.x, target.y, "world");
 
+    // Captured before the stimulus, not after it.
+    //
+    // The eye no longer eases toward a noise, it snaps to it on the frame the
+    // noise happens — so measuring from after `alertTo` measured the wrong
+    // window entirely and saw zero movement, because all of it had already
+    // happened. Easing was the bug: `updateGaze` rebuilt the target every frame
+    // and overwrote the snap, and in play the eye visibly never reached what it
+    // had supposedly turned to look at.
     const eye0 = m.gaze;
     const body0 = m.facing;
+
+    m.alertTo(target.x, target.y, "world");
     for (let i = 0; i < 4; i++) m.update(TICK_DT, s);
 
     const eyeMoved = angleGap(m.gaze, eye0);
     const bodyMoved = angleGap(m.facing, body0);
     expect(eyeMoved).toBeGreaterThan(bodyMoved);
+  });
+
+  it("puts the eye on the stimulus immediately, not eventually", () => {
+    const m = make(7, 3);
+    const s = senses();
+    const target = tileCenter(1, 3);
+
+    m.alertTo(target.x, target.y, "world");
+    const want = Math.atan2(target.y - m.y, target.x - m.x);
+    // On the very frame it is told, before a single update has run.
+    expect(angleGap(m.gaze, want)).toBeLessThan(0.01);
+
+    // And it holds there rather than being dragged back by the state machine,
+    // which is what made the snap invisible in play.
+    for (let i = 0; i < 6; i++) m.update(TICK_DT, s);
+    expect(angleGap(m.gaze, want)).toBeLessThan(0.5);
   });
 });
 

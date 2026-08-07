@@ -67,6 +67,10 @@ export class Renderer {
     this.drawPlayer(game);
     this.drawMimic(game);
     this.drawGlows(game);
+    // The eye goes on after the bloom. Drawn before it, the red glow washed
+    // straight over the pupil and the aperture and MIMIC read as a featureless
+    // bright blob — every shape cue the eye carries was being composited away.
+    this.drawMimicEyePass(game);
     this.drawDust(game);
     this.drawLamp(game);
     this.drawVignette();
@@ -864,13 +868,7 @@ export class Renderer {
     this.bctx.drawImage(frame, this.sx(m.x - TILE / 2), this.sy(m.y - TILE / 2));
     this.bctx.globalAlpha = 1;
 
-    // The eye goes on last, live.
-    //
-    // Drawn along the gaze, not the facing: the eye snaps to a noise and the
-    // body swings round after it. The vision cone stays on `facing`, so however
-    // far the eye has turned it can never imply MIMIC sees somewhere it does
-    // not — the gaze is a tell about intent, the cone is the truth.
-    this.drawMimicEye(game, m.x, m.y, m.gaze, clamp(b + 0.35, 0, 1));
+
 
     // Hesitation: a faint ring that tightens as it makes up its mind. Small and
     // brief, but it is the only feedback the player gets that a decoy worked.
@@ -886,6 +884,21 @@ export class Renderer {
       g.stroke();
       g.restore();
     }
+  }
+
+  /**
+   * The eye pass, run after the glows so the bloom cannot swallow it.
+   *
+   * Drawn along the gaze, not the facing: the eye snaps to a noise and the body
+   * swings round after it. The vision cone stays welded to `facing`, so however
+   * far the eye has turned it can never imply MIMIC sees somewhere it does not
+   * — the gaze is a tell about intent, the cone is the truth about perception.
+   */
+  private drawMimicEyePass(game: Game): void {
+    const m = game.mimic;
+    const b = this.brightness(game, Math.floor(m.x / TILE), Math.floor(m.y / TILE));
+    if (b < ENTITY_VISIBLE) return;
+    this.drawMimicEye(game, m.x, m.y, m.gaze, clamp(b + 0.35, 0, 1));
   }
 
   /**
@@ -913,9 +926,13 @@ export class Renderer {
     const glow = clamp(v.glow * flicker, 0, 1);
 
     // Where the eye sits on the shell, and a small live wander on top.
+    //
+    // The travel radius was 1.9px on a 16px body, so even a full turn slid the
+    // pupil less than four pixels and the snap was invisible in play. 2.8 is
+    // most of the room the shell has before the eye reads as falling off it.
     const ang = gaze + v.drift;
-    const ex = this.sx(x + Math.cos(ang) * 1.9);
-    const ey = this.sy(y - 0.5 + Math.sin(ang) * 1.9);
+    const ex = this.sx(x + Math.cos(ang) * 2.8);
+    const ey = this.sy(y - 0.5 + Math.sin(ang) * 2.8);
 
     const base = v.tint === "cyan" ? PAL.cyan : PAL.red;
     const core = v.tint === "cyan" ? PAL.cyanBright : PAL.redBright;
@@ -923,26 +940,49 @@ export class Renderer {
     g.save();
     g.globalAlpha = a;
 
-    // Socket. Its height is the aperture, so a focused eye is a narrow slit and
-    // a startled one is round — legible with colour removed entirely.
-    const rx = 3.1;
-    const ry = 3.1 * (0.35 + 0.65 * v.aperture);
-    g.fillStyle = alpha(PAL.redDeep, 0.75);
+    // A DARK pupil in a bright iris, not a bright core on a bright iris.
+    //
+    // The first version drew a light core inside a light iris, and at the size
+    // this actually renders — about eighteen screen pixels — red on red carried
+    // no information at all: the fully relaxed eye and the fully locked one were
+    // indistinguishable side by side, which made every value the controller
+    // computes pointless. Inverting it gives the whole range one continuous
+    // read: relaxed is a hollow ring with a wide dark centre, and focusing
+    // closes that centre until the eye is a solid burning slit.
+    const rx = 3.2;
+    // Aperture squashes the eye vertically. Deliberately dramatic, because the
+    // silhouette is the only cue that survives with colour removed entirely.
+    const ry = rx * (0.2 + 0.8 * v.aperture);
+
+    // Socket: near-black, so the iris has something to be bright against.
+    g.fillStyle = alpha(PAL.black, 0.85);
     g.beginPath();
-    g.ellipse(ex, ey, rx + 1, ry + 1, 0, 0, Math.PI * 2);
+    g.ellipse(ex, ey, rx + 1.2, ry + 1.2, 0, 0, Math.PI * 2);
     g.fill();
 
-    g.fillStyle = alpha(base, 0.6 + 0.4 * glow);
+    // Iris.
+    g.fillStyle = alpha(base, 0.55 + 0.45 * glow);
     g.beginPath();
     g.ellipse(ex, ey, rx, ry, 0, 0, Math.PI * 2);
     g.fill();
 
-    // Pupil.
-    const pr = Math.max(0.45, rx * 0.52 * v.pupil);
-    g.fillStyle = alpha(core, 0.55 + 0.45 * glow);
-    g.beginPath();
-    g.ellipse(ex, ey, pr, Math.min(pr, ry * 0.9), 0, 0, Math.PI * 2);
-    g.fill();
+    // Pupil: dark, and it shrinks toward nothing as MIMIC concentrates.
+    const pr = rx * 0.78 * v.pupil;
+    if (pr > 0.3) {
+      g.fillStyle = alpha(PAL.mimicBody, 0.92);
+      g.beginPath();
+      g.ellipse(ex, ey, pr, Math.min(pr, ry * 0.82), 0, 0, Math.PI * 2);
+      g.fill();
+    }
+
+    // Hot rim on a focused eye — the "burning" read at full lock.
+    if (v.pupil < 0.5) {
+      g.strokeStyle = alpha(core, (0.5 - v.pupil) * 1.6 * glow);
+      g.lineWidth = 1;
+      g.beginPath();
+      g.ellipse(ex, ey, rx * 0.55, Math.max(0.6, ry * 0.55), 0, 0, Math.PI * 2);
+      g.stroke();
+    }
 
     // Confirmed target gets a hard white core — the single frame that says
     // "it has decided it is you".
@@ -1004,7 +1044,9 @@ export class Renderer {
         this.art.glowRed,
         m.x,
         m.y,
-        (m.alerted ? 0.5 : 0.28) * charge + focus * 0.45,
+        // Pulled down from 0.5/0.28. The glow is atmosphere; at the old level
+        // it was the only thing you could see of MIMIC at all.
+        (m.alerted ? 0.34 : 0.18) * charge + focus * 0.32,
         (m.alerted ? 0.9 : 0.7) * (0.7 + 0.3 * power) + focus * 0.8,
       );
     }

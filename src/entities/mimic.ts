@@ -84,6 +84,8 @@ const WAYPOINT_EPS = 5;
 const GOAL_EPS = 12;
 /** Seconds the body waits after the eye has snapped to something. */
 const REACTION_HOLD = 0.18;
+/** Seconds the eye stays fixed on a stimulus before the state machine resumes. */
+const GAZE_HOLD = 0.4;
 /**
  * Patrol-seconds spent walking to one stop before MIMIC gives up on it and moves
  * to the next.
@@ -116,6 +118,17 @@ export class Mimic {
    */
   gaze = 0;
   private gazeTarget = 0;
+  /**
+   * Seconds the eye stays committed to what it was just told to look at.
+   *
+   * Without this the snap does not exist. `updateGaze` rebuilds `gazeTarget`
+   * from the state machine every single frame, so `lookAt` — the whole "the eye
+   * goes first" mechanism — was overwritten on the very next tick and the eye
+   * simply eased along with the body. Measured against a noise directly behind
+   * it: the eye needed to travel 2.93 radians, moved 0.62, wobbled, and drifted
+   * back. It never once pointed at the sound.
+   */
+  private gazeHold = 0;
   /**
    * Seconds of visible hesitation. Set when something it trusted turns out to
    * be wrong — an ECHO it chased, or the player slipping out of sight. It stops,
@@ -252,6 +265,7 @@ export class Mimic {
     this.facing = 0;
     this.gaze = 0;
     this.gazeTarget = 0;
+    this.gazeHold = 0;
     this.confusionT = 0;
     this.state = "patrol";
     this.detection = 0;
@@ -590,9 +604,17 @@ export class Mimic {
     this.setGoal(next.x, next.y);
   }
 
-  /** Points the eye at a world position. The body catches up on its own. */
+  /**
+   * Points the eye at a world position, instantly. The body catches up on its
+   * own over the following fraction of a second, which is the tell.
+   */
   lookAt(x: number, y: number): void {
     this.gazeTarget = Math.atan2(y - this.y, x - this.x);
+    // A real snap: the eye is already there on the frame the noise happens.
+    // Easing toward it reads as the eye being dragged round by the body, which
+    // is the opposite of the impression this is here to create.
+    this.gaze = this.gazeTarget;
+    this.gazeHold = GAZE_HOLD;
   }
 
   /**
@@ -603,6 +625,11 @@ export class Mimic {
    */
   private updateGaze(dt: number): void {
     this.confusionT = Math.max(0, this.confusionT - dt);
+    this.gazeHold = Math.max(0, this.gazeHold - dt);
+
+    // Committed to something it just noticed. Leaving the target alone here is
+    // what lets the snap survive long enough to be seen.
+    if (this.gazeHold > 0) return;
 
     if (this.confusionT > 0) {
       // Flicking between possibilities. Deliberately not smooth — it reads as
