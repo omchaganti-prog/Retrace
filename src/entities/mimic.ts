@@ -135,6 +135,16 @@ export class Mimic {
    * and the eye flicks between the possibilities.
    */
   confusionT = 0;
+  /**
+   * Why it is hesitating.
+   *
+   * Two quite different events both stop MIMIC dead — a decoy it committed to,
+   * and a target it simply lost — and until this existed they were
+   * indistinguishable to anything downstream. The eye showed the same
+   * "something broke my model" flicker for both, so "I fooled it" and "it lost
+   * me" read identically, and the lost-sight tell never appeared once in a run.
+   */
+  confusionCause: "echo" | "lost" | null = null;
   state: MimicState = "patrol";
 
   /** 0..1 buildup toward confirming the real player. */
@@ -267,6 +277,7 @@ export class Mimic {
     this.gazeTarget = 0;
     this.gazeHold = 0;
     this.confusionT = 0;
+    this.confusionCause = null;
     this.state = "patrol";
     this.detection = 0;
     this.playerDetected = false;
@@ -434,6 +445,9 @@ export class Mimic {
           // It committed to a copy. A beat of hesitation is how the player is
           // told, without a word of UI, that the trick landed.
           this.confusionT = Math.max(this.confusionT, 0.9);
+          // A decoy outranks a plain loss: being tricked is the more specific
+          // fact, and the one the player earned.
+          this.confusionCause = "echo";
         }
       }
     }
@@ -546,6 +560,7 @@ export class Mimic {
       out.lostPlayer = true;
       // Losing something it had confirmed is the other honest moment of doubt.
       this.confusionT = Math.max(this.confusionT, 1.2);
+      this.confusionCause = "lost";
     }
   }
 
@@ -625,6 +640,7 @@ export class Mimic {
    */
   private updateGaze(dt: number): void {
     this.confusionT = Math.max(0, this.confusionT - dt);
+    if (this.confusionT <= 0) this.confusionCause = null;
     this.gazeHold = Math.max(0, this.gazeHold - dt);
 
     // Committed to something it just noticed. Leaving the target alone here is

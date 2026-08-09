@@ -19,6 +19,7 @@ const base: EyeSnapshot = {
   detection: 0,
   playerDetected: false,
   confusionT: 0,
+  confusionCause: null,
   focusPulse: 0,
   hunt: false,
   power: 1,
@@ -143,7 +144,7 @@ describe("the eye shows when it has been fooled", () => {
     // so a calm eye must never do it, or the tell is worthless.
     let flickered = false;
     for (let i = 0; i < 40; i++) {
-      fooled.update(TICK_DT, { ...base, confusionT: 1 });
+      fooled.update(TICK_DT, { ...base, confusionT: 1, confusionCause: "echo" });
       if (fooled.view.flicker < 1) flickered = true;
     }
     expect(fooled.view.state).toBe("confused");
@@ -154,8 +155,25 @@ describe("the eye shows when it has been fooled", () => {
     const eye = new MimicEyeController();
     settle(eye, { detection: 0.8 }, 0.5);
     const focused = eye.view.pupil;
-    settle(eye, { confusionT: 1 }, 0.4);
+    settle(eye, { confusionT: 1, confusionCause: "echo" }, 0.4);
     expect(eye.view.pupil).toBeGreaterThan(focused);
+  });
+
+  it("tells being tricked apart from being given the slip", () => {
+    // MIMIC stops dead for two quite different reasons, and they used to share
+    // one tell. Because the decoy read outranked everything, losing the player
+    // — much the commoner event — was swallowed by it and the lost-sight tell
+    // never appeared once in a full run of live play.
+    const tricked = new MimicEyeController();
+    settle(tricked, { confusionT: 1, confusionCause: "echo" }, 0.4);
+
+    const slipped = new MimicEyeController();
+    settle(slipped, { confusionT: 1, confusionCause: "lost" }, 0.4);
+
+    expect(tricked.view.state).toBe("confused");
+    expect(slipped.view.state).toBe("lostSight");
+    // And they must not merely be different labels for the same picture.
+    expect(slipped.view.pupil).not.toBeCloseTo(tricked.view.pupil, 1);
   });
 
   it("looks uncertain when tracking an ECHO it has not seen through", () => {

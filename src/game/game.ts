@@ -1004,6 +1004,7 @@ export class Game {
       detection: m.detection,
       playerDetected: m.playerDetected,
       confusionT: m.confusionT,
+      confusionCause: m.confusionCause,
       focusPulse: m.focusPulse,
       hunt: this.hunt.active,
       power: this.abilities.powerFraction,

@@ -57,6 +57,8 @@ export interface EyeSnapshot {
   playerDetected: boolean;
   /** Seconds of hesitation left; MIMIC stands still while this runs. */
   confusionT: number;
+  /** Whether it was fooled by a copy, or simply lost you. They differ. */
+  confusionCause: "echo" | "lost" | null;
   /** Short spike on the frame a sighting is confirmed. */
   focusPulse: number;
   /** Hunt Mode: same entity, maximum alert. */
@@ -165,6 +167,15 @@ export class MimicEyeController {
   private flashT = 0;
   private predictT = 0;
   private failT = 0;
+  /**
+   * Seconds left on an ability's tell.
+   *
+   * The ability that fired is handed over for exactly one tick and then
+   * cleared, so keying the state off it directly made the tell one frame long —
+   * sixteen milliseconds, which is to say invisible. Measured over a run of
+   * live abilities: zero frames of it ever reached the screen.
+   */
+  private abilityT = 0;
   private cue: EyeCue | null = null;
   private lastState: MimicState = "patrol";
   private wasDetected = false;
@@ -180,6 +191,7 @@ export class MimicEyeController {
     this.flashT = 0;
     this.predictT = 0;
     this.failT = 0;
+    this.abilityT = 0;
     this.cue = null;
     this.reactionHold = 0;
     this.wasDetected = false;
@@ -208,13 +220,14 @@ export class MimicEyeController {
     this.flashT = 0;
     this.predictT = 0;
     this.failT = 0;
+    this.abilityT = 0;
     if (state) {
       this.state = state;
       this.stateT = 0;
       if (state === "predicting") this.predictT = PREDICT_TIME;
       if (state === "predictionFailed") this.failT = FAIL_TIME;
       if (state === "locked") this.flashT = LOCK_FLASH;
-      if (state === "ability") this.ringT = RING_TIME;
+      if (state === "ability") { this.ringT = RING_TIME; this.abilityT = RING_TIME; }
     }
   }
 
@@ -267,6 +280,7 @@ export class MimicEyeController {
 
     if (s.ability) {
       this.ringT = RING_TIME;
+      this.abilityT = RING_TIME;
       // Route prediction gets the thinking animation rather than a plain ring.
       if (s.ability === "predict") this.predictT = PREDICT_TIME;
     }
@@ -276,6 +290,7 @@ export class MimicEyeController {
     this.flashT = Math.max(0, this.flashT - dt);
     this.predictT = Math.max(0, this.predictT - dt);
     this.failT = Math.max(0, this.failT - dt);
+    this.abilityT = Math.max(0, this.abilityT - dt);
 
     /* ------------------------------------------------------- what it is */
 
@@ -385,9 +400,15 @@ export class MimicEyeController {
    */
   private classify(s: EyeSnapshot): EyeState {
     if (this.failT > 0) return "predictionFailed";
-    if (s.confusionT > 0) return "confused";
+    if (s.confusionT > 0) {
+      // Being tricked and being given the slip are different facts, and the
+      // player earned one of them. Sharing a single tell meant "I fooled it"
+      // and "it lost me" looked identical, and the lost-sight read — which is
+      // the more common of the two by far — never once appeared in a full run.
+      return s.confusionCause === "lost" ? "lostSight" : "confused";
+    }
     if (this.predictT > 0) return "predicting";
-    if (s.ability && this.ringT > 0) return "ability";
+    if (this.abilityT > 0) return "ability";
     if (s.playerDetected) return "locked";
 
     // Detection outranks every ambient state, and this ordering is load-bearing.
@@ -399,13 +420,16 @@ export class MimicEyeController {
     // searching pupil, and the player's only warning was the lock itself. The
     // one thing this eye exists to say is "I am seeing you, now"; it cannot be
     // outvoted by what MIMIC happens to be doing while it does it.
-    if (s.detection > 0.05) return "focusing";
-
-    if (s.state === "chase") {
-      // Chasing with no confirmation left is the moment it lost you, and it
-      // must not look the same as chasing with you in view.
-      return "lostSight";
+    // Chase without a confirmed sighting is the moment it lost you, and it has
+    // to be checked before the generic buildup below: detection decays rather
+    // than dropping to zero, so the leftovers kept reading as "focusing" and
+    // the tell never appeared once in a full run. Detection climbing again
+    // means it is re-acquiring, which genuinely is focusing.
+    if (s.state === "chase" && !s.playerDetected) {
+      return s.detection > 0.35 ? "focusing" : "lostSight";
     }
+
+    if (s.detection > 0.05) return "focusing";
     if (s.state === "investigate") return "searching";
     if (s.state === "alert" || s.state === "intercept") {
       return s.target === "echo" ? "uncertain" : "heard";
